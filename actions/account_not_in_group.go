@@ -14,7 +14,7 @@ import (
 	"github.com/topicuskeyhub/sdk-go/models"
 )
 
-type ensureAccountNotInGroup struct {
+type accountNotInGroup struct {
 	accountUUID string
 	groupUUID   string
 	account     models.AuthAccountable
@@ -22,22 +22,22 @@ type ensureAccountNotInGroup struct {
 	membership  models.GroupGroupAccountable
 }
 
-func NewEnsureAccountNotInGroup(accountUUID string, groupUUID string) action.AutomationAction {
-	return &ensureAccountNotInGroup{
+func NewAccountNotInGroup(accountUUID string, groupUUID string) action.AutomationAction {
+	return &accountNotInGroup{
 		accountUUID: accountUUID,
 		groupUUID:   groupUUID,
 	}
 }
 
-func (a *ensureAccountNotInGroup) TypeID() string {
-	return "ensureAccountNotInGroup"
+func (a *accountNotInGroup) TypeID() string {
+	return "accountNotInGroup"
 }
 
-func (a *ensureAccountNotInGroup) Parameters() []string {
+func (a *accountNotInGroup) Parameters() []string {
 	return []string{a.accountUUID, a.groupUUID}
 }
 
-func (a *ensureAccountNotInGroup) Init(ctx context.Context, env action.Environment) {
+func (a *accountNotInGroup) Init(ctx context.Context, env *action.Environment) {
 	group, err := action.First[models.GroupGroupable](env.Account1.Client.Group().Get(ctx, &keyhubgroup.GroupRequestBuilderGetRequestConfiguration{
 		QueryParameters: &keyhubgroup.GroupRequestBuilderGetQueryParameters{
 			Uuid:       []string{a.groupUUID},
@@ -67,13 +67,13 @@ func (a *ensureAccountNotInGroup) Init(ctx context.Context, env action.Environme
 	a.account = account
 }
 
-func (a *ensureAccountNotInGroup) IsSatisfied() bool {
+func (a *accountNotInGroup) IsSatisfied() bool {
 	return a.membership == nil
 }
 
-func (a *ensureAccountNotInGroup) Execute(ctx context.Context, env action.Environment) {
+func (a *accountNotInGroup) Execute(ctx context.Context, env *action.Environment) error {
 	auth := *env.Account1
-	if a.accountUUID == *auth.Account.GetUuid() {
+	if a.accountUUID == *env.Account2.Account.GetUuid() {
 		auth = *env.Account2
 	}
 
@@ -83,37 +83,39 @@ func (a *ensureAccountNotInGroup) Execute(ctx context.Context, env action.Enviro
 		},
 	}))
 	if err != nil {
-		log.Fatalf("cannot fetch group membership in '%s': %s", a.String(), err)
+		return fmt.Errorf("cannot fetch group membership in '%s': %s", a.String(), err)
 	}
 	err = auth.Client.Group().ByGroupidInt64(*action.Self(member).GetId()).Account().ByAccountidInt64(*action.Koppeling(member).GetId()).Delete(ctx, nil)
 	if err != nil {
-		log.Fatalf("cannot remove user from group in '%s': %s", a.String(), err)
+		return fmt.Errorf("cannot remove user from group in '%s': %s", a.String(), err)
 	}
+	return nil
 }
 
-func (a *ensureAccountNotInGroup) Setup(env action.Environment) []action.AutomationAction {
-	accountUUID := *env.Account1.Account.GetUuid()
-	if a.accountUUID == accountUUID {
-		accountUUID = *env.Account2.Account.GetUuid()
+func (a *accountNotInGroup) Setup(env *action.Environment) []action.AutomationAction {
+	account1UUID := *env.Account1.Account.GetUuid()
+	account2UUID := *env.Account2.Account.GetUuid()
+	if a.accountUUID == account1UUID || a.accountUUID == account2UUID {
+		return make([]action.AutomationAction, 0)
 	}
-	return []action.AutomationAction{NewEnsureAccountInGroup(accountUUID, a.groupUUID, action.Ptr(models.MANAGER_GROUPGROUPRIGHTS))}
+	return []action.AutomationAction{NewAccountInGroup(account1UUID, a.groupUUID, action.Ptr(models.MANAGER_GROUPGROUPRIGHTS))}
 }
 
-func (*ensureAccountNotInGroup) Perform(env action.Environment) []action.AutomationAction {
+func (*accountNotInGroup) Perform(env *action.Environment) []action.AutomationAction {
 	return make([]action.AutomationAction, 0)
 }
 
-func (a *ensureAccountNotInGroup) Revert() action.AutomationAction {
-	return NewEnsureAccountInGroup(a.groupUUID, a.accountUUID, a.membership.GetRights())
+func (a *accountNotInGroup) Revert() action.AutomationAction {
+	return NewAccountInGroup(a.groupUUID, a.accountUUID, a.membership.GetRights())
 }
 
-func (a *ensureAccountNotInGroup) String() string {
+func (a *accountNotInGroup) String() string {
 	accountName := "unknown"
 	if a.account != nil {
 		accountName = *a.account.GetUsername()
 	}
 	groupName := "unknown"
-	if a.account != nil {
+	if a.group != nil {
 		groupName = *a.group.GetName()
 	}
 	return fmt.Sprintf("Ensure account %s (%s) is not in group %s (%s)", a.accountUUID, accountName, a.groupUUID, groupName)

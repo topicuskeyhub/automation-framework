@@ -1,14 +1,13 @@
 // Copyright (c) Topicus Security B.V.
 // SPDX-License-Identifier: APSL-2.0
 
-package auth
+package action
 
 import (
 	"context"
 	"fmt"
 	"net/http"
 
-	"github.com/topicuskeyhub/automation-framework/action"
 	keyhub "github.com/topicuskeyhub/sdk-go"
 	"github.com/topicuskeyhub/sdk-go/models"
 	keyhubvaultrecord "github.com/topicuskeyhub/sdk-go/vaultrecord"
@@ -40,7 +39,7 @@ func NewAuthenticationConfig(issuer string, clientID string, clientSecret string
 	}
 }
 
-func authenticateWithDeviceFlow(ctx context.Context, config AuthenticationConfig) (*action.AuthenticatedAccount, error) {
+func authenticateWithDeviceFlow(ctx context.Context, config AuthenticationConfig) (*AuthenticatedAccount, error) {
 	adapter, err := keyhub.NewKeyHubRequestAdapterForDeviceCode(&http.Client{}, config.Issuer, config.ClientID, config.ClientSecret, config.Scopes)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create Topicus KeyHub API client: %s", err)
@@ -51,13 +50,13 @@ func authenticateWithDeviceFlow(ctx context.Context, config AuthenticationConfig
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch account: %s", err)
 	}
-	return &action.AuthenticatedAccount{
+	return &AuthenticatedAccount{
 		Client:  client,
 		Account: account,
 	}, nil
 }
 
-func SetupEnvironment(ctx context.Context, config AuthenticationConfig) (*action.Environment, error) {
+func SetupEnvironment(ctx context.Context, config AuthenticationConfig) (*Environment, error) {
 	account1, err := authenticateWithDeviceFlow(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("unable to authenticate first user: %s", err)
@@ -68,13 +67,13 @@ func SetupEnvironment(ctx context.Context, config AuthenticationConfig) (*action
 		return nil, fmt.Errorf("unable to authenticate second user: %s", err)
 	}
 
-	ret := &action.Environment{
+	ret := &Environment{
 		Account1: account1,
 		Account2: account2,
 	}
 
 	if config.VaultRecoveryRecordUUID != "" {
-		record, err := action.First[models.VaultVaultRecordable](ret.Account1.Client.Vaultrecord().Get(ctx, &keyhubvaultrecord.VaultrecordRequestBuilderGetRequestConfiguration{
+		record, err := First[models.VaultVaultRecordable](ret.Account1.Client.Vaultrecord().Get(ctx, &keyhubvaultrecord.VaultrecordRequestBuilderGetRequestConfiguration{
 			QueryParameters: &keyhubvaultrecord.VaultrecordRequestBuilderGetQueryParameters{
 				Uuid:       []string{config.VaultRecoveryRecordUUID},
 				Additional: []string{"secret"},

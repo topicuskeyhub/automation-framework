@@ -12,11 +12,11 @@ import (
 type AutomationAction interface {
 	TypeID() string
 	Parameters() []string
-	Init(ctx context.Context, env Environment)
+	Init(ctx context.Context, env *Environment)
 	IsSatisfied() bool
-	Execute(ctx context.Context, env Environment)
-	Setup(env Environment) []AutomationAction
-	Perform(env Environment) []AutomationAction
+	Execute(ctx context.Context, env *Environment) error
+	Setup(env *Environment) []AutomationAction
+	Perform(env *Environment) []AutomationAction
 	Revert() AutomationAction
 	fmt.Stringer
 }

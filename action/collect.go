@@ -8,36 +8,43 @@ import (
 	"slices"
 )
 
-func Collect(ctx context.Context, action AutomationAction, env Environment) []AutomationAction {
+type Stepper interface {
+	Add(num int) error
+}
+
+func Collect(ctx context.Context, action AutomationAction, env *Environment, stepper Stepper) []AutomationAction {
 	action.Init(ctx, env)
 	ret := make([]AutomationAction, 0)
-	ret = traverse(ctx, action, env, ret)
+	ret = traverse(ctx, action, env, stepper, ret)
 	ret = deleteInverses(ret)
 	ret = deleteDuplicates(ret)
 	return ret
 }
 
-func traverse(ctx context.Context, action AutomationAction, env Environment, result []AutomationAction) []AutomationAction {
+func traverse(ctx context.Context, action AutomationAction, env *Environment, stepper Stepper, result []AutomationAction) []AutomationAction {
 	if action.IsSatisfied() {
 		return result
 	}
 	cleanup := make([]AutomationAction, 0)
 	for _, a := range action.Setup(env) {
+		stepper.Add(1)
 		a.Init(ctx, env)
 		if !a.IsSatisfied() {
-			result = traverse(ctx, a, env, result)
+			result = traverse(ctx, a, env, stepper, result)
 			cleanup = append(cleanup, a.Revert())
 		}
 	}
 	result = append(result, action)
 	for _, a := range action.Perform(env) {
+		stepper.Add(1)
 		a.Init(ctx, env)
-		result = traverse(ctx, a, env, result)
+		result = traverse(ctx, a, env, stepper, result)
 	}
 	slices.Reverse(cleanup)
 	for _, a := range cleanup {
+		stepper.Add(1)
 		a.Init(ctx, env)
-		result = traverse(ctx, a, env, result)
+		result = traverse(ctx, a, env, stepper, result)
 	}
 	return result
 }
