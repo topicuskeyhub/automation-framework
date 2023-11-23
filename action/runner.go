@@ -3,7 +3,6 @@ package action
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -34,22 +33,29 @@ func buildProgressBar(max int64, desc string) *progressbar.ProgressBar {
 func executeAction(ctx context.Context, action AutomationAction, env *Environment) {
 	err := action.Execute(ctx, env)
 	if err != nil {
-		fmt.Printf("An error occured during execution of %s: %s", action.String(), err)
+		fmt.Printf("\n\nAn error occured during execution of %s: %s", action.String(), err)
 		prompt := promptui.Select{
 			Label: "How do you want to continue",
 			Items: []string{"Retry", "Continue", "Abort"},
 		}
 		i, _, err := prompt.Run()
 		if err != nil {
-			log.Fatalf("Select aborted: %s", err)
+			Abort(action, "Select aborted: %s", err)
 		} else if i == 0 {
-			fmt.Printf("Retrying action")
+			fmt.Printf("Retrying action\n")
 			executeAction(ctx, action, env)
 		} else if i == 1 {
-			fmt.Printf("Continuing with the next action")
+			fmt.Printf("Continuing with the next action\n")
 		} else if i == 2 {
-			log.Fatalf("Aborting automation")
+			Abort(action, "Aborting automation")
 		}
+	}
+}
+
+func printActions(actions []AutomationAction) {
+	fmt.Printf("The following steps will be performed:\n")
+	for _, a := range actions {
+		fmt.Printf(" - %s\n", a.String())
 	}
 }
 
@@ -57,18 +63,15 @@ func Run(config AuthenticationConfig, action AutomationAction) {
 	ctx := context.Background()
 	env, err := SetupEnvironment(ctx, config)
 	if err != nil {
-		log.Fatalf("unable to authenticate to Topicus KeyHub: %s", err)
+		Abort(action, "unable to authenticate to Topicus KeyHub: %s", err)
 		return
 	}
-	fmt.Printf("Collecting actions for %s...", action.String())
+	fmt.Printf("Collecting actions for %s...\n", action.String())
 	bar := buildProgressBar(-1, "collecting")
 	actions := Collect(ctx, action, env, bar)
 	bar.Finish()
 
-	fmt.Printf("The following steps will be performed:")
-	for _, a := range actions {
-		log.Printf(" - %s", a.String())
-	}
+	printActions(actions)
 
 	prompt := promptui.Prompt{
 		Label:     "Do you want to continue",
@@ -76,7 +79,7 @@ func Run(config AuthenticationConfig, action AutomationAction) {
 	}
 	_, err = prompt.Run()
 	if err != nil {
-		log.Fatalf("Aborting automation")
+		Abort(action, "Aborting automation")
 		return
 	}
 

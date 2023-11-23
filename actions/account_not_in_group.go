@@ -6,7 +6,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/topicuskeyhub/automation-framework/action"
 	keyhubaccount "github.com/topicuskeyhub/sdk-go/account"
@@ -33,8 +32,8 @@ func (a *accountNotInGroup) TypeID() string {
 	return "accountNotInGroup"
 }
 
-func (a *accountNotInGroup) Parameters() []string {
-	return []string{a.accountUUID, a.groupUUID}
+func (a *accountNotInGroup) Parameters() []*string {
+	return []*string{&a.accountUUID, &a.groupUUID}
 }
 
 func (a *accountNotInGroup) Init(ctx context.Context, env *action.Environment) {
@@ -45,12 +44,12 @@ func (a *accountNotInGroup) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		log.Fatalf("unable to read group with uuid %s: %s", a.groupUUID, err)
+		action.Abort(a, "unable to read group with uuid %s: %s", a.groupUUID, err)
 	}
 	a.group = group
 
 	for _, m := range group.GetAdditionalObjects().GetAccounts().GetItems() {
-		if m.GetUuid() == &a.accountUUID {
+		if *m.GetUuid() == a.accountUUID {
 			a.membership = m
 			break
 		}
@@ -62,7 +61,7 @@ func (a *accountNotInGroup) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		log.Fatalf("unable to read account with uuid %s: %s", a.accountUUID, err)
+		action.Abort(a, "unable to read account with uuid %s: %s", a.accountUUID, err)
 	}
 	a.account = account
 }
@@ -85,7 +84,7 @@ func (a *accountNotInGroup) Execute(ctx context.Context, env *action.Environment
 	if err != nil {
 		return fmt.Errorf("cannot fetch group membership in '%s': %s", a.String(), err)
 	}
-	err = auth.Client.Group().ByGroupidInt64(*action.Self(member).GetId()).Account().ByAccountidInt64(*action.Koppeling(member).GetId()).Delete(ctx, nil)
+	err = auth.Client.Group().ByGroupidInt64(*action.Self(a.group).GetId()).Account().ByAccountidInt64(*action.Koppeling(member).GetId()).Delete(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("cannot remove user from group in '%s': %s", a.String(), err)
 	}
@@ -106,17 +105,21 @@ func (*accountNotInGroup) Perform(env *action.Environment) []action.AutomationAc
 }
 
 func (a *accountNotInGroup) Revert() action.AutomationAction {
-	return NewAccountInGroup(a.groupUUID, a.accountUUID, a.membership.GetRights())
+	var rights *models.GroupGroupRights
+	if a.membership != nil {
+		rights = a.membership.GetRights()
+	}
+	return NewAccountInGroup(a.accountUUID, a.groupUUID, rights)
 }
 
 func (a *accountNotInGroup) String() string {
-	accountName := "unknown"
+	accountName := a.accountUUID
 	if a.account != nil {
 		accountName = *a.account.GetUsername()
 	}
-	groupName := "unknown"
+	groupName := a.groupUUID
 	if a.group != nil {
 		groupName = *a.group.GetName()
 	}
-	return fmt.Sprintf("Ensure account %s (%s) is not in group %s (%s)", a.accountUUID, accountName, a.groupUUID, groupName)
+	return fmt.Sprintf("Remove %s from '%s'", accountName, groupName)
 }

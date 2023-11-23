@@ -6,12 +6,11 @@ package action
 import (
 	"context"
 	"fmt"
-	"slices"
 )
 
 type AutomationAction interface {
 	TypeID() string
-	Parameters() []string
+	Parameters() []*string
 	Init(ctx context.Context, env *Environment)
 	IsSatisfied() bool
 	Execute(ctx context.Context, env *Environment) error
@@ -22,11 +21,30 @@ type AutomationAction interface {
 }
 
 func IsEqual(a AutomationAction, b AutomationAction) bool {
-	return a.TypeID() == b.TypeID() && slices.Equal(a.Parameters(), b.Parameters())
+	if a.TypeID() != b.TypeID() {
+		return false
+	}
+	ap := a.Parameters()
+	bp := b.Parameters()
+	if len(ap) != len(bp) {
+		return false
+	}
+	for i := 0; i < len(ap); i++ {
+		apv := ap[i]
+		bpv := bp[i]
+		if apv == nil || bpv == nil {
+			continue
+		}
+		if *apv != *bpv {
+			return false
+		}
+	}
+	return true
 }
 
 func IsInverse(a AutomationAction, b AutomationAction) bool {
-	return IsEqual(a.Revert(), b)
+	revert := a.Revert()
+	return revert != nil && IsEqual(revert, b)
 }
 
 func IsEqualOrInverse(a AutomationAction, b AutomationAction) bool {

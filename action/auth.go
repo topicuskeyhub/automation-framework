@@ -67,6 +67,10 @@ func SetupEnvironment(ctx context.Context, config AuthenticationConfig) (*Enviro
 		return nil, fmt.Errorf("unable to authenticate second user: %s", err)
 	}
 
+	if *account1.Account.GetUuid() == *account2.Account.GetUuid() {
+		return nil, fmt.Errorf("authenticated as the same user twice: %s", *account1.Account.GetUsername())
+	}
+
 	ret := &Environment{
 		Account1: account1,
 		Account2: account2,

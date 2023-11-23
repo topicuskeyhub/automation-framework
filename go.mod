@@ -2,9 +2,12 @@ module github.com/topicuskeyhub/automation-framework
 
 go 1.20
 
-require github.com/topicuskeyhub/sdk-go v0.29.1-0.20231115090905-2e3dacc95093
+require (
+	github.com/topicuskeyhub/sdk-go v0.29.1-0.20231115090905-2e3dacc95093
+	github.com/ttacon/chalk v0.0.0-20160626202418-22c06c80ed31
+)
 
-require github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
+require github.com/chzyer/readline v1.5.1 // indirect
 
 require (
 	github.com/cjlapao/common-go v0.0.39 // indirect
@@ -15,13 +18,13 @@ require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/uuid v1.4.0 // indirect
 	github.com/manifoldco/promptui v0.9.0
-	github.com/microsoft/kiota-abstractions-go v1.5.0 // indirect
-	github.com/microsoft/kiota-http-go v1.1.0 // indirect
+	github.com/microsoft/kiota-abstractions-go v1.5.2 // indirect
+	github.com/microsoft/kiota-http-go v1.1.1 // indirect
 	github.com/microsoft/kiota-serialization-json-go v1.0.4 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
-	github.com/schollz/progressbar/v3 v3.14.1 // indirect
-	github.com/std-uritemplate/std-uritemplate/go v0.0.46 // indirect
+	github.com/schollz/progressbar/v3 v3.14.1
+	github.com/std-uritemplate/std-uritemplate/go v0.0.47 // indirect
 	go.opentelemetry.io/otel v1.21.0 // indirect
 	go.opentelemetry.io/otel/metric v1.21.0 // indirect
 	go.opentelemetry.io/otel/trace v1.21.0 // indirect

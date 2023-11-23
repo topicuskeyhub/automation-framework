@@ -5,9 +5,10 @@ package action
 
 import (
 	"fmt"
-	"log"
+	"os"
 
 	"github.com/topicuskeyhub/sdk-go/models"
+	"github.com/ttacon/chalk"
 )
 
 func First[T models.Linkableable](wrapper interface{ GetItems() []T }, err error) (T, error) {
@@ -31,7 +32,7 @@ func Self(linkable models.Linkableable) models.RestLinkable {
 			return l
 		}
 	}
-	log.Fatalf("item does not have a self link")
+	Abort(nil, "item does not have a self link")
 	return nil
 }
 
@@ -41,6 +42,15 @@ func Koppeling(linkable models.Linkableable) models.RestLinkable {
 			return l
 		}
 	}
-	log.Fatalf("item does not have a koppeling link")
+	Abort(nil, "item does not have a koppeling link")
 	return nil
+}
+
+func Abort(action AutomationAction, format string, v ...any) {
+	if action == nil {
+		fmt.Fprintf(os.Stderr, "\n\n%serror: %s%s\n", chalk.Red, fmt.Sprintf(format, v...), chalk.Reset)
+	} else {
+		fmt.Fprintf(os.Stderr, "\n\n%serror in %s: %s%s\n", chalk.Red, action.String(), fmt.Sprintf(format, v...), chalk.Reset)
+	}
+	os.Exit(1)
 }

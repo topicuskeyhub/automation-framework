@@ -6,7 +6,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/topicuskeyhub/automation-framework/action"
 	keyhubaccount "github.com/topicuskeyhub/sdk-go/account"
@@ -35,16 +34,16 @@ func (a *accountInGroup) TypeID() string {
 	return "accountInGroup"
 }
 
-func (a *accountInGroup) Parameters() []string {
-	var rel string
-	if a.rights == nil {
-		rel = "in"
-	} else if *a.rights == models.MANAGER_GROUPGROUPRIGHTS {
-		rel = "manager"
-	} else {
-		rel = "member"
+func (a *accountInGroup) Parameters() []*string {
+	var rel *string
+	if a.rights != nil {
+		if *a.rights == models.MANAGER_GROUPGROUPRIGHTS {
+			rel = action.Ptr("manager")
+		} else {
+			rel = action.Ptr("member")
+		}
 	}
-	return []string{a.accountUUID, a.groupUUID, rel}
+	return []*string{&a.accountUUID, &a.groupUUID, rel}
 }
 
 func (a *accountInGroup) Init(ctx context.Context, env *action.Environment) {
@@ -55,12 +54,12 @@ func (a *accountInGroup) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		log.Fatalf("unable to read group with uuid %s: %s", a.groupUUID, err)
+		action.Abort(a, "unable to read group with uuid %s: %s", a.groupUUID, err)
 	}
 	a.group = group
 
 	for _, m := range group.GetAdditionalObjects().GetAccounts().GetItems() {
-		if m.GetUuid() == &a.accountUUID {
+		if *m.GetUuid() == a.accountUUID {
 			a.membership = m
 			break
 		}
@@ -72,7 +71,7 @@ func (a *accountInGroup) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		log.Fatalf("unable to read account with uuid %s: %s", a.accountUUID, err)
+		action.Abort(a, "unable to read account with uuid %s: %s", a.accountUUID, err)
 	}
 	a.account = account
 }
@@ -101,19 +100,19 @@ func (a *accountInGroup) Execute(ctx context.Context, env *action.Environment) e
 		newAddAdmin := models.NewRequestAddGroupAdminRequest()
 		newAddAdmin.SetNewAdmin(a.account)
 		newAddAdmin.SetGroup(a.group)
-		newAddAdmin.SetPrivateKey(&env.VaultRecoveryKey)
 		newAddAdmin.SetComment(action.Ptr("automation accountInGroup"))
 		wrapper := models.NewRequestModificationRequestLinkableWrapper()
 		wrapper.SetItems([]models.RequestModificationRequestable{newAddAdmin})
-		auth1.Client.Request().Post(ctx, wrapper, nil)
-		addAdmin, err := action.First[models.RequestModificationRequestable](auth1.Client.Request().Post(ctx, wrapper, nil))
+		req, err := action.First[models.RequestModificationRequestable](auth1.Client.Request().Post(ctx, wrapper, nil))
 		if err != nil {
 			return fmt.Errorf("cannot request to add manager to group in '%s': %s", a.String(), err)
 		}
 
+		addAdmin := req.(models.RequestAddGroupAdminRequestable)
+		addAdmin.SetPrivateKey(&env.VaultRecoveryKey)
 		addAdmin.SetStatus(action.Ptr(models.ALLOWED_REQUESTMODIFICATIONREQUESTSTATUS))
 		addAdmin.SetFeedback(action.Ptr("automation accountInGroup"))
-		addAdmin, err = auth2.Client.Request().ByRequestidInt64(*action.Self(addAdmin).GetId()).Put(ctx, addAdmin, nil)
+		_, err = auth2.Client.Request().ByRequestidInt64(*action.Self(addAdmin).GetId()).Put(ctx, addAdmin, nil)
 		if err != nil {
 			return fmt.Errorf("cannot confirm to add manager to group in '%s': %s", a.String(), err)
 		}
@@ -133,7 +132,7 @@ func (a *accountInGroup) Execute(ctx context.Context, env *action.Environment) e
 			return fmt.Errorf("cannot fetch group membership in '%s': %s", a.String(), err)
 		}
 		member.SetRights(action.Ptr(models.NORMAL_GROUPGROUPRIGHTS))
-		member, err = auth.Client.Group().ByGroupidInt64(*action.Self(member).GetId()).Account().ByAccountidInt64(*action.Koppeling(member).GetId()).Put(ctx, member, nil)
+		_, err = auth.Client.Group().ByGroupidInt64(*action.Self(member).GetId()).Account().ByAccountidInt64(*action.Koppeling(member).GetId()).Put(ctx, member, nil)
 		if err != nil {
 			return fmt.Errorf("cannot convert user to normal in '%s': %s", a.String(), err)
 		}
@@ -159,27 +158,27 @@ func (*accountInGroup) Perform(env *action.Environment) []action.AutomationActio
 
 func (a *accountInGroup) Revert() action.AutomationAction {
 	if a.membership == nil {
-		return NewAccountNotInGroup(a.groupUUID, a.accountUUID)
+		return NewAccountNotInGroup(a.accountUUID, a.groupUUID)
 	}
-	return NewAccountInGroup(a.groupUUID, a.accountUUID, a.membership.GetRights())
+	return NewAccountInGroup(a.accountUUID, a.groupUUID, a.membership.GetRights())
 }
 
 func (a *accountInGroup) String() string {
-	accountName := "unknown"
+	accountName := a.accountUUID
 	if a.account != nil {
 		accountName = *a.account.GetUsername()
 	}
-	groupName := "unknown"
+	groupName := a.groupUUID
 	if a.group != nil {
 		groupName = *a.group.GetName()
 	}
 	var rel string
 	if a.rights == nil {
-		rel = "in"
+		rel = ""
 	} else if *a.rights == models.MANAGER_GROUPGROUPRIGHTS {
-		rel = "manager of"
+		rel = " as manager"
 	} else {
-		rel = "normal member of"
+		rel = " as normal member"
 	}
-	return fmt.Sprintf("Ensure account %s (%s) is %s group %s (%s)", a.accountUUID, accountName, rel, a.groupUUID, groupName)
+	return fmt.Sprintf("Add %s to '%s'%s", accountName, groupName, rel)
 }

@@ -6,7 +6,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/topicuskeyhub/automation-framework/action"
 	keyhubgroup "github.com/topicuskeyhub/sdk-go/group"
@@ -35,8 +34,8 @@ func (a *groupOwnerOfGOS) TypeID() string {
 	return "groupOwnerOfGOS"
 }
 
-func (a *groupOwnerOfGOS) Parameters() []string {
-	return []string{a.systemUUID, a.gosNameInSystem, a.groupUUID}
+func (a *groupOwnerOfGOS) Parameters() []*string {
+	return []*string{&a.systemUUID, &a.gosNameInSystem, &a.groupUUID}
 }
 
 func (a *groupOwnerOfGOS) Init(ctx context.Context, env *action.Environment) {
@@ -46,7 +45,7 @@ func (a *groupOwnerOfGOS) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		log.Fatalf("unable to read system with uuid %s: %s", a.systemUUID, err)
+		action.Abort(a, "unable to read system with uuid %s: %s", a.systemUUID, err)
 	}
 	a.system = system
 
@@ -57,18 +56,17 @@ func (a *groupOwnerOfGOS) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		log.Fatalf("unable to read group on system with name %s: %s", a.gosNameInSystem, err)
+		action.Abort(a, "unable to read group on system with name %s: %s", a.gosNameInSystem, err)
 	}
 	a.gos = gos
 
 	group, err := action.First[models.GroupGroupable](env.Account1.Client.Group().Get(ctx, &keyhubgroup.GroupRequestBuilderGetRequestConfiguration{
 		QueryParameters: &keyhubgroup.GroupRequestBuilderGetQueryParameters{
-			Uuid:       []string{a.groupUUID},
-			Additional: []string{"accounts"},
+			Uuid: []string{a.groupUUID},
 		},
 	}))
 	if err != nil {
-		log.Fatalf("unable to read group with uuid %s: %s", a.groupUUID, err)
+		action.Abort(a, "unable to read group with uuid %s: %s", a.groupUUID, err)
 	}
 	a.group = group
 
@@ -85,7 +83,6 @@ func (a *groupOwnerOfGOS) Execute(ctx context.Context, env *action.Environment) 
 	newTransferOwner.SetComment(action.Ptr("automation groupOwnerOfGOS"))
 	wrapper := models.NewRequestModificationRequestLinkableWrapper()
 	wrapper.SetItems([]models.RequestModificationRequestable{newTransferOwner})
-	env.Account1.Client.Request().Post(ctx, wrapper, nil)
 	transferOwner, err := action.First[models.RequestModificationRequestable](env.Account1.Client.Request().Post(ctx, wrapper, nil))
 	if err != nil {
 		return fmt.Errorf("cannot request to transfer group on system ownership in '%s': %s", a.String(), err)
@@ -93,7 +90,7 @@ func (a *groupOwnerOfGOS) Execute(ctx context.Context, env *action.Environment) 
 
 	transferOwner.SetStatus(action.Ptr(models.ALLOWED_REQUESTMODIFICATIONREQUESTSTATUS))
 	transferOwner.SetFeedback(action.Ptr("automation groupOwnerOfGOS"))
-	transferOwner, err = env.Account2.Client.Request().ByRequestidInt64(*action.Self(transferOwner).GetId()).Put(ctx, transferOwner, nil)
+	_, err = env.Account2.Client.Request().ByRequestidInt64(*action.Self(transferOwner).GetId()).Put(ctx, transferOwner, nil)
 	if err != nil {
 		return fmt.Errorf("cannot confirm to transfer group on system ownership in '%s': %s", a.String(), err)
 	}
@@ -116,7 +113,7 @@ func (a *groupOwnerOfGOS) Revert() action.AutomationAction {
 }
 
 func (a *groupOwnerOfGOS) String() string {
-	systemName := "unknown"
+	systemName := a.systemUUID
 	if a.system != nil {
 		systemName = *a.system.GetName()
 	}
@@ -125,10 +122,10 @@ func (a *groupOwnerOfGOS) String() string {
 		gosName = *a.gos.GetDisplayName()
 	}
 
-	groupName := "unknown"
+	groupName := a.groupUUID
 	if a.group != nil {
 		groupName = *a.group.GetName()
 	}
 
-	return fmt.Sprintf("Ensure ownership of %s (%s) within the system %s (%s) is set to group %s (%s)", a.gosNameInSystem, gosName, a.systemUUID, systemName, a.groupUUID, groupName)
+	return fmt.Sprintf("Transfer ownership of '%s' (%s) on '%s' to '%s'", a.gosNameInSystem, gosName, systemName, groupName)
 }
