@@ -112,6 +112,14 @@ func (a *accountNotInGroup) Revert() action.AutomationAction {
 	return NewAccountInGroup(a.accountUUID, a.groupUUID, rights)
 }
 
+func (a *accountNotInGroup) Progress() string {
+	accountName := a.accountUUID
+	if a.account != nil {
+		accountName = *a.account.GetUsername()
+	}
+	return fmt.Sprintf("Removing %s", accountName)
+}
+
 func (a *accountNotInGroup) String() string {
 	accountName := a.accountUUID
 	if a.account != nil {

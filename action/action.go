@@ -17,6 +17,7 @@ type AutomationAction interface {
 	Setup(env *Environment) []AutomationAction
 	Perform(env *Environment) []AutomationAction
 	Revert() AutomationAction
+	Progress() string
 	fmt.Stringer
 }
 

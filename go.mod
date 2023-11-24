@@ -3,6 +3,7 @@ module github.com/topicuskeyhub/automation-framework
 go 1.20
 
 require (
+	github.com/aquilax/truncate v1.0.0
 	github.com/topicuskeyhub/sdk-go v0.29.1-0.20231115090905-2e3dacc95093
 	github.com/ttacon/chalk v0.0.0-20160626202418-22c06c80ed31
 )

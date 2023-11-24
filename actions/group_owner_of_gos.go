@@ -112,6 +112,14 @@ func (a *groupOwnerOfGOS) Revert() action.AutomationAction {
 	return NewGroupOwnerOfGOS(a.systemUUID, a.gosNameInSystem, *a.gos.GetOwner().GetUuid())
 }
 
+func (a *groupOwnerOfGOS) Progress() string {
+	gosName := "unknown"
+	if a.gos != nil && a.gos.GetDisplayName() != nil {
+		gosName = *a.gos.GetDisplayName()
+	}
+	return fmt.Sprintf("Transfering %s", gosName)
+}
+
 func (a *groupOwnerOfGOS) String() string {
 	systemName := a.systemUUID
 	if a.system != nil {

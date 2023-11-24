@@ -163,6 +163,14 @@ func (a *accountInGroup) Revert() action.AutomationAction {
 	return NewAccountInGroup(a.accountUUID, a.groupUUID, a.membership.GetRights())
 }
 
+func (a *accountInGroup) Progress() string {
+	accountName := a.accountUUID
+	if a.account != nil {
+		accountName = *a.account.GetUsername()
+	}
+	return fmt.Sprintf("Adding %s", accountName)
+}
+
 func (a *accountInGroup) String() string {
 	accountName := a.accountUUID
 	if a.account != nil {

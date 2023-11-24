@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/aquilax/truncate"
 	"github.com/manifoldco/promptui"
 	"github.com/schollz/progressbar/v3"
 )
@@ -85,7 +86,7 @@ func Run(config AuthenticationConfig, action AutomationAction) {
 
 	bar = buildProgressBar(int64(len(actions)), "Starting")
 	for _, a := range actions {
-		bar.Describe(a.String())
+		bar.Describe(truncate.Truncate(a.Progress(), 40, truncate.DEFAULT_OMISSION, truncate.PositionEnd))
 		bar.Add(1)
 		executeAction(ctx, a, env)
 	}
