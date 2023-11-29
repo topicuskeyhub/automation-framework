@@ -18,7 +18,6 @@ func Collect(ctx context.Context, action AutomationAction, env *Environment, ste
 	action.Init(ctx, env)
 	ret := make([]AutomationAction, 0)
 	ret = traverse(ctx, action, false, env, stepper, ret)
-	printActions(ret)
 	ret = deleteInverses(ret)
 	return ret
 }

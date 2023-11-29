@@ -72,7 +72,7 @@ func KeyHubError(err error) error {
 			filterErrorParameters(report.GetApplicationErrorParameters().GetAdditionalData()), stringPointerToString(report.GetMessage()))
 	}
 	if report.GetStacktrace() != nil {
-		msg = "\n" + strings.Join(report.GetStacktrace(), "\n")
+		msg = msg + "\n" + strings.Join(report.GetStacktrace(), "\n")
 	}
 	return errors.New(msg)
 }
