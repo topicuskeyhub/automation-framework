@@ -45,7 +45,7 @@ func (a *groupOwnerOfGOS) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		action.Abort(a, "unable to read system with uuid %s: %s", a.systemUUID, err)
+		action.Abort(a, "unable to read system with uuid %s: %s", a.systemUUID, action.KeyHubError(err))
 	}
 	a.system = system
 
@@ -56,7 +56,7 @@ func (a *groupOwnerOfGOS) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		action.Abort(a, "unable to read group on system with name %s: %s", a.gosNameInSystem, err)
+		action.Abort(a, "unable to read group on system with name %s: %s", a.gosNameInSystem, action.KeyHubError(err))
 	}
 	a.gos = gos
 
@@ -66,7 +66,7 @@ func (a *groupOwnerOfGOS) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		action.Abort(a, "unable to read group with uuid %s: %s", a.groupUUID, err)
+		action.Abort(a, "unable to read group with uuid %s: %s", a.groupUUID, action.KeyHubError(err))
 	}
 	a.group = group
 
@@ -76,23 +76,22 @@ func (a *groupOwnerOfGOS) IsSatisfied() bool {
 	return *a.gos.GetOwner().GetUuid() == a.groupUUID
 }
 
+func (a *groupOwnerOfGOS) Requires3() bool {
+	return false
+}
+
+func (a *groupOwnerOfGOS) AllowGlobalOptimization() bool {
+	return false
+}
+
 func (a *groupOwnerOfGOS) Execute(ctx context.Context, env *action.Environment) error {
 	newTransferOwner := models.NewRequestTransferGroupOnSystemOwnershipRequest()
 	newTransferOwner.SetGroupOnSystem(a.gos)
 	newTransferOwner.SetGroup(a.group)
 	newTransferOwner.SetComment(action.Ptr("automation groupOwnerOfGOS"))
-	wrapper := models.NewRequestModificationRequestLinkableWrapper()
-	wrapper.SetItems([]models.RequestModificationRequestable{newTransferOwner})
-	transferOwner, err := action.First[models.RequestModificationRequestable](env.Account1.Client.Request().Post(ctx, wrapper, nil))
+	err := submitAndAccept(ctx, newTransferOwner, env.Account1, env.Account2)
 	if err != nil {
-		return fmt.Errorf("cannot request to transfer group on system ownership in '%s': %s", a.String(), err)
-	}
-
-	transferOwner.SetStatus(action.Ptr(models.ALLOWED_REQUESTMODIFICATIONREQUESTSTATUS))
-	transferOwner.SetFeedback(action.Ptr("automation groupOwnerOfGOS"))
-	_, err = env.Account2.Client.Request().ByRequestidInt64(*action.Self(transferOwner).GetId()).Put(ctx, transferOwner, nil)
-	if err != nil {
-		return fmt.Errorf("cannot confirm to transfer group on system ownership in '%s': %s", a.String(), err)
+		return fmt.Errorf("cannot request to transfer group on system ownership in '%s': %s", a.String(), action.KeyHubError(err))
 	}
 	return nil
 }

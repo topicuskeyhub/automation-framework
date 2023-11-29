@@ -44,36 +44,51 @@ func (a *accountNotInGroup) Init(ctx context.Context, env *action.Environment) {
 		},
 	}))
 	if err != nil {
-		action.Abort(a, "unable to read group with uuid %s: %s", a.groupUUID, err)
+		action.Abort(a, "unable to read group with uuid %s: %s", a.groupUUID, action.KeyHubError(err))
 	}
 	a.group = group
 
-	for _, m := range group.GetAdditionalObjects().GetAccounts().GetItems() {
-		if *m.GetUuid() == a.accountUUID {
-			a.membership = m
-			break
+	if a.accountUUID == action.Account3UUIDPlaceholder && env.Account3 != nil {
+		a.accountUUID = *env.Account3.Account.GetUuid()
+	}
+	if a.accountUUID != action.Account3UUIDPlaceholder {
+		for _, m := range group.GetAdditionalObjects().GetAccounts().GetItems() {
+			if *m.GetUuid() == a.accountUUID {
+				a.membership = m
+				break
+			}
 		}
-	}
 
-	account, err := action.First[models.AuthAccountable](env.Account1.Client.Account().Get(ctx, &keyhubaccount.AccountRequestBuilderGetRequestConfiguration{
-		QueryParameters: &keyhubaccount.AccountRequestBuilderGetQueryParameters{
-			Uuid: []string{a.accountUUID},
-		},
-	}))
-	if err != nil {
-		action.Abort(a, "unable to read account with uuid %s: %s", a.accountUUID, err)
+		account, err := action.First[models.AuthAccountable](env.Account1.Client.Account().Get(ctx, &keyhubaccount.AccountRequestBuilderGetRequestConfiguration{
+			QueryParameters: &keyhubaccount.AccountRequestBuilderGetQueryParameters{
+				Uuid: []string{a.accountUUID},
+			},
+		}))
+		if err != nil {
+			action.Abort(a, "unable to read account with uuid %s: %s", a.accountUUID, action.KeyHubError(err))
+		}
+		a.account = account
 	}
-	a.account = account
 }
 
 func (a *accountNotInGroup) IsSatisfied() bool {
 	return a.membership == nil
 }
 
+func (a *accountNotInGroup) Requires3() bool {
+	return a.accountUUID == action.Account3UUIDPlaceholder
+}
+
+func (a *accountNotInGroup) AllowGlobalOptimization() bool {
+	return true
+}
+
 func (a *accountNotInGroup) Execute(ctx context.Context, env *action.Environment) error {
 	auth := *env.Account1
 	if a.accountUUID == *env.Account2.Account.GetUuid() {
 		auth = *env.Account2
+	} else if env.Account3 != nil && a.accountUUID == *env.Account3.Account.GetUuid() {
+		auth = *env.Account3
 	}
 
 	member, err := action.First[models.GroupGroupAccountable](auth.Client.Group().ByGroupidInt64(*action.Self(a.group).GetId()).Account().Get(ctx, &keyhubgroup.ItemAccountRequestBuilderGetRequestConfiguration{
@@ -82,11 +97,11 @@ func (a *accountNotInGroup) Execute(ctx context.Context, env *action.Environment
 		},
 	}))
 	if err != nil {
-		return fmt.Errorf("cannot fetch group membership in '%s': %s", a.String(), err)
+		return fmt.Errorf("cannot fetch group membership in '%s': %s", a.String(), action.KeyHubError(err))
 	}
 	err = auth.Client.Group().ByGroupidInt64(*action.Self(a.group).GetId()).Account().ByAccountidInt64(*action.Koppeling(member).GetId()).Delete(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("cannot remove user from group in '%s': %s", a.String(), err)
+		return fmt.Errorf("cannot remove user from group in '%s': %s", a.String(), action.KeyHubError(err))
 	}
 	return nil
 }
@@ -94,7 +109,7 @@ func (a *accountNotInGroup) Execute(ctx context.Context, env *action.Environment
 func (a *accountNotInGroup) Setup(env *action.Environment) []action.AutomationAction {
 	account1UUID := *env.Account1.Account.GetUuid()
 	account2UUID := *env.Account2.Account.GetUuid()
-	if a.accountUUID == account1UUID || a.accountUUID == account2UUID {
+	if a.accountUUID == account1UUID || a.accountUUID == account2UUID || a.accountUUID == action.Account3UUIDPlaceholder {
 		return make([]action.AutomationAction, 0)
 	}
 	return []action.AutomationAction{NewAccountInGroup(account1UUID, a.groupUUID, action.Ptr(models.MANAGER_GROUPGROUPRIGHTS))}
@@ -124,6 +139,8 @@ func (a *accountNotInGroup) String() string {
 	accountName := a.accountUUID
 	if a.account != nil {
 		accountName = *a.account.GetUsername()
+	} else if a.accountUUID == action.Account3UUIDPlaceholder {
+		accountName = "account #3"
 	}
 	groupName := a.groupUUID
 	if a.group != nil {

@@ -8,11 +8,15 @@ import (
 	"fmt"
 )
 
+const Account3UUIDPlaceholder = "00000000-0000-0000-0000-000000000000"
+
 type AutomationAction interface {
 	TypeID() string
 	Parameters() []*string
 	Init(ctx context.Context, env *Environment)
 	IsSatisfied() bool
+	Requires3() bool
+	AllowGlobalOptimization() bool
 	Execute(ctx context.Context, env *Environment) error
 	Setup(env *Environment) []AutomationAction
 	Perform(env *Environment) []AutomationAction

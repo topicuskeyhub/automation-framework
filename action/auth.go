@@ -90,3 +90,18 @@ func SetupEnvironment(ctx context.Context, config AuthenticationConfig) (*Enviro
 	}
 	return ret, nil
 }
+
+func AuthenticateAccount3(ctx context.Context, config AuthenticationConfig, env *Environment) error {
+	account3, err := authenticateWithDeviceFlow(ctx, config)
+	if err != nil {
+		return fmt.Errorf("unable to authenticate third user: %s", err)
+	}
+
+	if *account3.Account.GetUuid() == *env.Account1.Account.GetUuid() ||
+		*account3.Account.GetUuid() == *env.Account2.Account.GetUuid() {
+		return fmt.Errorf("authenticated as the same user twice: %s", *account3.Account.GetUsername())
+	}
+
+	env.Account3 = account3
+	return nil
+}

@@ -16,5 +16,6 @@ type AuthenticatedAccount struct {
 type Environment struct {
 	Account1         *AuthenticatedAccount
 	Account2         *AuthenticatedAccount
+	Account3         *AuthenticatedAccount
 	VaultRecoveryKey string
 }
