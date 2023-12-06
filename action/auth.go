@@ -5,6 +5,7 @@ package action
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -48,7 +49,7 @@ func authenticateWithDeviceFlow(ctx context.Context, config AuthenticationConfig
 	client := keyhub.NewKeyHubClient(adapter)
 	account, err := client.Account().Me().Get(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("unable to fetch account: %s", err)
+		return nil, fmt.Errorf("unable to fetch account: %s", KeyHubError(err))
 	}
 	return &AuthenticatedAccount{
 		Client:  client,
@@ -56,13 +57,32 @@ func authenticateWithDeviceFlow(ctx context.Context, config AuthenticationConfig
 	}, nil
 }
 
+func checkKeyHubAdmin(ctx context.Context, account *AuthenticatedAccount) error {
+	settings, err := account.Client.Account().Me().Settings().Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("unable to fetch account settings: %s", KeyHubError(err))
+	}
+	if !*settings.GetKeyHubAdmin() {
+		return errors.New("user is not a Topicus KeyHub Administrator")
+	}
+	return nil
+}
+
 func SetupEnvironment(ctx context.Context, config AuthenticationConfig) (*Environment, error) {
 	account1, err := authenticateWithDeviceFlow(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("unable to authenticate first user: %s", err)
 	}
+	err = checkKeyHubAdmin(ctx, account1)
+	if err != nil {
+		return nil, fmt.Errorf("unable to authenticate first user: %s", err)
+	}
 
 	account2, err := authenticateWithDeviceFlow(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("unable to authenticate second user: %s", err)
+	}
+	err = checkKeyHubAdmin(ctx, account2)
 	if err != nil {
 		return nil, fmt.Errorf("unable to authenticate second user: %s", err)
 	}

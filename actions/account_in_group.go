@@ -21,6 +21,7 @@ type accountInGroup struct {
 	account     models.AuthAccountable
 	group       models.GroupGroupable
 	membership  models.GroupGroupAccountable
+	vaultAccess bool
 }
 
 func NewAccountInGroup(accountUUID string, groupUUID string, rights *models.GroupGroupRights) action.AutomationAction {
@@ -28,6 +29,7 @@ func NewAccountInGroup(accountUUID string, groupUUID string, rights *models.Grou
 		accountUUID: accountUUID,
 		groupUUID:   groupUUID,
 		rights:      rights,
+		vaultAccess: false,
 	}
 }
 
@@ -80,6 +82,18 @@ func (a *accountInGroup) Init(ctx context.Context, env *action.Environment) {
 		}
 		a.account = account
 	}
+	if a.membership != nil {
+		memberships, err := env.Account1.Client.Account().ByAccountidInt64(*action.Self(a.account).GetId()).Group().Get(ctx, &keyhubaccount.ItemGroupRequestBuilderGetRequestConfiguration{
+			QueryParameters: &keyhubaccount.ItemGroupRequestBuilderGetQueryParameters{
+				Group:       []int64{*action.Self(group).GetId()},
+				VaultAccess: []bool{true},
+			},
+		})
+		if err != nil {
+			action.Abort(a, "unable to read group memberships for account with uuid %s: %s", a.accountUUID, action.KeyHubError(err))
+		}
+		a.vaultAccess = len(memberships.GetItems()) > 0
+	}
 }
 
 func (a *accountInGroup) IsSatisfied() bool {
@@ -88,6 +102,9 @@ func (a *accountInGroup) IsSatisfied() bool {
 	}
 	if a.rights == nil {
 		return true
+	}
+	if !a.vaultAccess {
+		return false
 	}
 	isManager := *a.membership.GetRights() == models.MANAGER_GROUPGROUPRIGHTS
 	mustBeManager := *a.rights == models.MANAGER_GROUPGROUPRIGHTS
@@ -103,6 +120,7 @@ func (a *accountInGroup) AllowGlobalOptimization() bool {
 }
 
 func (a *accountInGroup) Execute(ctx context.Context, env *action.Environment) error {
+	vaultAccessGiven := false
 	if a.membership == nil || (a.rights != nil && *a.rights == models.MANAGER_GROUPGROUPRIGHTS) {
 		auth1 := env.Account1
 		auth2 := env.Account2
@@ -130,6 +148,7 @@ func (a *accountInGroup) Execute(ctx context.Context, env *action.Environment) e
 		if err != nil {
 			return fmt.Errorf("cannot confirm to add manager to group in '%s': %s", a.String(), action.KeyHubError(err))
 		}
+		vaultAccessGiven = true
 	}
 	if a.group.GetAuthorizingGroupMembership() == nil {
 		if a.rights != nil && *a.rights == models.NORMAL_GROUPGROUPRIGHTS {
@@ -200,6 +219,31 @@ func (a *accountInGroup) Execute(ctx context.Context, env *action.Environment) e
 			}
 		}
 	}
+	if !vaultAccessGiven {
+		memberships, err := env.Account1.Client.Account().ByAccountidInt64(*action.Self(a.account).GetId()).Group().Get(ctx, &keyhubaccount.ItemGroupRequestBuilderGetRequestConfiguration{
+			QueryParameters: &keyhubaccount.ItemGroupRequestBuilderGetQueryParameters{
+				VaultAccess: []bool{true},
+				Group:       []int64{*action.Self(a.group).GetId()},
+			},
+		})
+		if err != nil {
+			action.Abort(a, "unable to read group memberships for account with uuid %s: %s", a.accountUUID, action.KeyHubError(err))
+		}
+		if len(memberships.GetItems()) == 0 {
+			auth := env.Account1
+			if a.accountUUID == *env.Account1.Account.GetUuid() {
+				auth = env.Account2
+			}
+
+			recovery := models.NewVaultVaultRecovery()
+			recovery.SetAccount(a.account)
+			recovery.SetPrivateKey(&env.VaultRecoveryKey)
+			err := auth.Client.Group().ByGroupidInt64(*action.Self(a.group).GetId()).Vault().Recover().Post(ctx, recovery, nil)
+			if err != nil {
+				return fmt.Errorf("cannot recover vault access in '%s': %s", a.String(), action.KeyHubError(err))
+			}
+		}
+	}
 	return nil
 }
 
@@ -218,7 +262,7 @@ func (a *accountInGroup) Setup(env *action.Environment) []action.AutomationActio
 	return ret
 }
 
-func (*accountInGroup) Perform(env *action.Environment) []action.AutomationAction {
+func (a *accountInGroup) Perform(env *action.Environment) []action.AutomationAction {
 	return make([]action.AutomationAction, 0)
 }
 
@@ -226,7 +270,10 @@ func (a *accountInGroup) Revert() action.AutomationAction {
 	if a.membership == nil {
 		return NewAccountNotInGroup(a.accountUUID, a.groupUUID)
 	}
-	return NewAccountInGroup(a.accountUUID, a.groupUUID, a.membership.GetRights())
+	if a.rights != nil && *a.membership.GetRights() != *a.rights {
+		return NewAccountInGroup(a.accountUUID, a.groupUUID, a.membership.GetRights())
+	}
+	return nil
 }
 
 func (a *accountInGroup) Progress() string {
