@@ -69,7 +69,7 @@ func executeAction(ctx context.Context, action AutomationAction, env *Environmen
 	action.Init(ctx, env)
 	err := action.Execute(ctx, env)
 	if err != nil {
-		fmt.Printf("\n\nAn error occured during execution of %s: %s", action.String(), err)
+		fmt.Printf("\n\nAn error occured during execution of %s:\n%s\n", action.String(), err)
 		prompt := promptui.Select{
 			Label: "How do you want to continue",
 			Items: []string{"Retry", "Continue", "Abort"},
