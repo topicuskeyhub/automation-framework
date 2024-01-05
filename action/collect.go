@@ -5,6 +5,8 @@ package action
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"slices"
 )
 
@@ -15,9 +17,15 @@ type Stepper interface {
 }
 
 func Collect(ctx context.Context, action AutomationAction, env *Environment, stepper Stepper) []AutomationAction {
+	var err error
 	action.Init(ctx, env)
 	ret := make([]AutomationAction, 0)
-	ret = traverse(ctx, action, false, env, stepper, ret)
+	ret, err = traverse(ctx, 1, action, false, env, stepper, ret)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+		return nil
+	}
 	ret = deleteInverses(ret)
 	return ret
 }
@@ -34,35 +42,50 @@ func addStep(stepper Stepper, step AutomationAction) AutomationAction {
 	return step
 }
 
-func traverse(ctx context.Context, action AutomationAction, force bool, env *Environment, stepper Stepper, result []AutomationAction) []AutomationAction {
+func traverse(ctx context.Context, depth int, action AutomationAction, force bool, env *Environment, stepper Stepper, result []AutomationAction) ([]AutomationAction, error) {
 	if !force && action.IsSatisfied() {
-		return result
+		return result, nil
 	}
+	if depth > 20 {
+		return nil, fmt.Errorf("maximum depth of 20 exceeded:\n  at %s", action.String())
+	}
+
+	var err error
+	ret := result
 	cleanup := make([]AutomationAction, 0)
 	for _, a := range addSteps(stepper, action.Setup(env)) {
 		stepper.Step()
 		a.Init(ctx, env)
 		if !a.IsSatisfied() {
-			result = traverse(ctx, a, false, env, stepper, result)
+			ret, err = traverse(ctx, depth+1, a, false, env, stepper, ret)
+			if err != nil {
+				return nil, fmt.Errorf("%s\n  at %s", err, action.String())
+			}
 			revert := addStep(stepper, a.Revert())
 			if revert != nil {
 				cleanup = append(cleanup, revert)
 			}
 		}
 	}
-	result = append(result, action)
+	ret = append(ret, action)
 	for _, a := range addSteps(stepper, action.Perform(env)) {
 		stepper.Step()
 		a.Init(ctx, env)
-		result = traverse(ctx, a, force, env, stepper, result)
+		ret, err = traverse(ctx, depth+1, a, force, env, stepper, ret)
+		if err != nil {
+			return nil, fmt.Errorf("%s\n  at %s", err, action.String())
+		}
 	}
 	slices.Reverse(cleanup)
 	for _, a := range cleanup {
 		stepper.Step()
 		a.Init(ctx, env)
-		result = traverse(ctx, a, true, env, stepper, result)
+		ret, err = traverse(ctx, depth+1, a, true, env, stepper, ret)
+		if err != nil {
+			return nil, fmt.Errorf("%s\n  at %s", err, action.String())
+		}
 	}
-	return result
+	return ret, nil
 }
 
 func deleteInverses(actions []AutomationAction) []AutomationAction {

@@ -177,8 +177,9 @@ func (a *accountInGroup) Execute(ctx context.Context, env *action.Environment) e
 				UpdateGroupMembershipType: []string{
 					models.ADD_REQUESTUPDATEGROUPMEMBERSHIPTYPE.String(),
 					models.MODIFY_REQUESTUPDATEGROUPMEMBERSHIPTYPE.String()},
-				Status: []string{models.REQUESTED_REQUESTMODIFICATIONREQUESTSTATUS.String()},
-				Group:  []int64{*action.Self(a.group).GetId()},
+				Status:          []string{models.REQUESTED_REQUESTMODIFICATIONREQUESTSTATUS.String()},
+				Group:           []int64{*action.Self(a.group).GetId()},
+				AccountToUpdate: []int64{*action.Self(a.account).GetId()},
 			},
 		}))
 		if err != nil {

@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	keyhub "github.com/topicuskeyhub/sdk-go"
+	keyhubaccount "github.com/topicuskeyhub/sdk-go/account"
 	"github.com/topicuskeyhub/sdk-go/models"
 	keyhubvaultrecord "github.com/topicuskeyhub/sdk-go/vaultrecord"
 )
@@ -48,13 +50,21 @@ func authenticateWithDeviceFlow(ctx context.Context, config AuthenticationConfig
 
 	client := keyhub.NewKeyHubClient(adapter)
 	account, err := client.Account().Me().Get(ctx, nil)
+
+	ret := &AuthenticatedAccount{
+		Client:  client,
+		Account: account,
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch account: %s", KeyHubError(err))
 	}
-	return &AuthenticatedAccount{
-		Client:  client,
-		Account: account,
-	}, nil
+	err = checkKeyHubAdmin(ctx, ret)
+	if err != nil {
+		return nil, fmt.Errorf("user fails sanity checks: %s", err)
+	}
+
+	return ret, nil
 }
 
 func checkKeyHubAdmin(ctx context.Context, account *AuthenticatedAccount) error {
@@ -65,6 +75,24 @@ func checkKeyHubAdmin(ctx context.Context, account *AuthenticatedAccount) error 
 	if !*settings.GetKeyHubAdmin() {
 		return errors.New("user is not a Topicus KeyHub Administrator")
 	}
+
+	ownAccount, err := account.Client.Account().ByAccountidInt64(*Self(account.Account).GetId()).Get(ctx, &keyhubaccount.WithAccountItemRequestBuilderGetRequestConfiguration{
+		QueryParameters: &keyhubaccount.WithAccountItemRequestBuilderGetQueryParameters{
+			Additional: []string{"groups"},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to fetch own account: %s", KeyHubError(err))
+	}
+	groups := ownAccount.GetAdditionalObjects().GetGroups().GetItems()
+	if len(ownAccount.GetAdditionalObjects().GetGroups().GetItems()) > 1 {
+		names := make([]string, len(groups))
+		for i, g := range groups {
+			names[i] = *g.GetName()
+		}
+		return fmt.Errorf("user is member of groups other than KeyHub Administrator: %s", strings.Join(names, ", "))
+	}
+
 	return nil
 }
 
@@ -73,16 +101,8 @@ func SetupEnvironment(ctx context.Context, config AuthenticationConfig) (*Enviro
 	if err != nil {
 		return nil, fmt.Errorf("unable to authenticate first user: %s", err)
 	}
-	err = checkKeyHubAdmin(ctx, account1)
-	if err != nil {
-		return nil, fmt.Errorf("unable to authenticate first user: %s", err)
-	}
 
 	account2, err := authenticateWithDeviceFlow(ctx, config)
-	if err != nil {
-		return nil, fmt.Errorf("unable to authenticate second user: %s", err)
-	}
-	err = checkKeyHubAdmin(ctx, account2)
 	if err != nil {
 		return nil, fmt.Errorf("unable to authenticate second user: %s", err)
 	}
